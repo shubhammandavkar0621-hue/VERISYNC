@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  IN_PROGRESS
+  VERIFIED
+  FAILED
+  REVIEW
+  FLAGGED
+  TECHNICAL_FAILURE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SignalType {
+  FACE_LIVENESS
+  VOICE_MATCH
+  LIP_AUDIO_SYNC
+  CHALLENGE_RESPONSE
+  MOTION_CONSISTENCY
+  BREATH_TIMING
+  CAPTURE_INTEGRITY
+}
+
+enum AnomalyType {
+  AUDIO_VIDEO_OFFSET
+  CHALLENGE_MISMATCH
+  MOTION_INCONSISTENCY
+  CAPTURE_GAP
+  DUPLICATE_FRAME
+  LOW_AUDIO_QUALITY
+  FACE_NOT_DETECTED
+  MULTIPLE_FACES
+  DEVICE_ANOMALY
+  OTHER
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AuditAction {
+  ADMIN_LOGIN
+  ADMIN_LOGIN_FAILED
+  ADMIN_MFA_VERIFIED
+  USER_LOGIN
+  USER_LOGIN_FAILED
+  USER_LOGOUT
+  USER_REGISTER
+  VIEW_KYC
+  SEARCH_CUSTOMER
+  VIEW_CUSTOMER_PROFILE
+  VIEW_FRAUD_ANALYSIS
+  DOWNLOAD_REPORT
+  VIEW_AUDIT_LOG
+  VIEW_SYSTEM_STATUS
+  VIEW_ANALYTICS
+  RUN_DEMO_SIMULATION
+  CHANGE_SETTINGS
+  CREATE_KYC_SESSION
+  START_KYC_SESSION
+  ANALYZE_KYC_SESSION
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  customerId   String   @unique
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  fullName     String
+  phone        String?
+  isActive     Boolean  @default(true)
+  isDemo       Boolean  @default(false)
+  mfaEnabled   Boolean  @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  kycSessions KycSession[]
+  auditLogs   AuditLog[]   @relation("ActorAuditLogs")
+
+  @@index([role])
+  @@index([email])
+}
+
+model KycSession {
+  id                      String    @id @default(cuid())
+  sessionCode             String    @unique
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                  KycStatus @default(PENDING)
+  riskLevel               RiskLevel?
+  avConsistencyScore      Float?
+  faceLivenessScore       Float?
+  voiceMatchScore         Float?
+  lipAudioSyncScore       Float?
+  challengeResponseScore  Float?
+  motionConsistencyScore  Float?
+  breathTimingScore       Float?
+  captureIntegrityScore   Float?
+  durationMs              Int?
+  attemptNumber           Int       @default(1)
+  failureReason           String?
+  primaryFindingSummary   String?
+  isDemo                  Boolean   @default(false)
+  demoScenario            String?
+  deviceMetadata          Json?
+  ipAddress               String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  challenge      Challenge?
+  signals        VerificationSignal[]
+  anomalies      Anomaly[]
+  timelineEvents KycTimelineEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model Challenge {
+  id                       String     @id @default(cuid())
+  kycSessionId             String     @unique
+  kycSession               KycSession @relation(fields: [kycSessionId], references: [id], onDelete: Cascade)
+  phrase                   String
+  requiredAction           String
+  actionLabel              String
+  expectedActionWindowMinMs Int
+  expectedActionWindowMaxMs Int
+  generatedAt              DateTime   @default(now())
+  spokenPhraseDetected     String?
+  actionDetected           Boolean    @default(false)
+  phraseMatchScore         Float?
+  actionMatchScore         Float?
+  passed                   Boolean?
+
+  @@index([kycSessionId])
+}
+
+model VerificationSignal {
+  id           String     @id @default(cuid())
+  kycSessionId String
+  kycSession   KycSession @relation(fields: [kycSessionId], references: [id], onDelete: Cascade)
+  type         SignalType
+  score        Float
+  weight       Float
+  details      Json?
+  createdAt    DateTime   @default(now())
+
+  @@index([kycSessionId])
+  @@index([type])
+}
+
+model Anomaly {
+  id           String          @id @default(cuid())
+  kycSessionId String
+  kycSession   KycSession      @relation(fields: [kycSessionId], references: [id], onDelete: Cascade)
+  type         AnomalyType
+  severity     AnomalySeverity
+  description  String
+  offsetMs     Int?
+  metadata     Json?
+  createdAt    DateTime        @default(now())
+
+  @@index([kycSessionId])
+  @@index([type])
+}
+
+model KycTimelineEvent {
+  id           String     @id @default(cuid())
+  kycSessionId String
+  kycSession   KycSession @relation(fields: [kycSessionId], references: [id], onDelete: Cascade)
+  timestampMs  Int
+  label        String
+  category     String
+  isAnomalous  Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@index([kycSessionId])
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  actorId     String?
+  actor       User?       @relation("ActorAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail  String
+  actorRole   Role
+  action      AuditAction
+  resource    String
+  resourceId  String?
+  result      AuditResult @default(SUCCESS)
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}

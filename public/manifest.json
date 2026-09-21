@@ -1,0 +1,10 @@
+{
+  "name": "KYC-SYNC",
+  "short_name": "KYC-SYNC",
+  "description": "Verify the identity. Verify the synchronization.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1a",
+  "theme_color": "#0b3ea8",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

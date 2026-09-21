@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kycsync
+      POSTGRES_PASSWORD: kycsync
+      POSTGRES_DB: kycsync
+    ports:
+      - "5432:5432"
+    volumes:
+      - kycsync_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kycsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://kycsync:kycsync@db:5432/kycsync?schema=public"
+      AUTH_SECRET: "change-me-to-a-long-random-string-before-deploying"
+      DEMO_MODE: "true"
+      NODE_ENV: "production"
+    ports:
+      - "3000:3000"
+
+volumes:
+  kycsync_pgdata:
